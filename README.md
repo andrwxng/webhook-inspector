@@ -1,6 +1,6 @@
 # Webhook Inspector
 
-Self-hosted webhook inspection: get a unique URL, send any HTTP request to it, and watch the full capture (method, path, query, headers, body) appear **live** in a dashboard — streamed over SSE the moment it lands, no polling. An open-source, self-hosted take on RequestBin / webhook.site.
+Self-hosted webhook inspection: get a unique URL, send any HTTP request to it, and watch the full capture (method, path, query, headers, body) appear **live** in a dashboard — streamed over SSE the moment it lands, no polling. Captured requests can be **replayed** to any target with faithful reconstruction, **edited before resending** (method/headers/body), or **auto-forwarded** as they arrive — all SSRF-guarded. An open-source, self-hosted take on RequestBin / webhook.site.
 
 > Full architecture rationale lives in [docs/decisions.md](docs/decisions.md).
 
@@ -51,5 +51,6 @@ One service runs everything: the backend serves the built frontend, and migratio
 | `/in/:slug[/*]` | **Ingest** — untrusted | Any method, any content-type, raw-byte capture, no auth. 1 MiB body cap (413), per-endpoint rate limit (429, Redis-backed, fails open), 15s request timeout. Retention: newest 500 per endpoint, 7-day TTL |
 | `/api/*` | **Viewer** — authenticated | Cookie sessions, JSON, schema-validated |
 | `/api/endpoints/:id/stream` | **Viewer** — authenticated | SSE live stream with Last-Event-ID catch-up |
+| `/api/endpoints/:eid/requests/:rid/replay` | **Viewer** — authenticated | Replay / edit-and-resend to a target URL (SSRF-guarded) |
 | `/healthz` | Ops | Liveness probe |
 | `/*` | Static | Built frontend (production) |
