@@ -4,6 +4,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { loadConfig, type Config } from './config.js';
+import { InProcessRequestBus, type RequestBus } from './events.js';
 import { apiRoutes } from './routes/api/index.js';
 import { ingestRoutes } from './routes/ingest.js';
 
@@ -11,6 +12,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     db: pg.Pool;
     config: Config;
+    bus: RequestBus;
   }
 }
 
@@ -38,11 +40,15 @@ export async function buildApp(
   const app = Fastify({
     logger: opts.logger ?? true,
     trustProxy: true, // Railway/most PaaS terminate TLS in front of us
+    // SSE connections stay open forever; without this, close() would hang
+    // waiting for them (tests, and graceful shutdown on deploys).
+    forceCloseConnections: true,
   });
 
   const pool = new pg.Pool({ connectionString: config.databaseUrl });
   app.decorate('db', pool);
   app.decorate('config', config);
+  app.decorate('bus', new InProcessRequestBus());
   app.addHook('onClose', async () => {
     await pool.end();
   });

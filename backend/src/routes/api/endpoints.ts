@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { generateSlug } from '../../lib/ids.js';
 import { requireAuth } from '../../plugins/auth.js';
+import { streamRoutes } from './stream.js';
 
 const UUID_PATTERN =
   '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
@@ -8,6 +9,9 @@ const UUID_PATTERN =
 export const endpointRoutes: FastifyPluginAsync = async (app) => {
   // Everything under /api/endpoints requires a logged-in user.
   app.addHook('preHandler', requireAuth);
+
+  // SSE live stream (inherits the auth hook).
+  await app.register(streamRoutes);
 
   app.post<{ Body: { name?: string } | null }>(
     '/',

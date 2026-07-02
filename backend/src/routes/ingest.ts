@@ -38,28 +38,52 @@ export const ingestRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ error: 'unknown endpoint' });
     }
 
+    const endpointId = endpoint.rows[0]!.id;
     const subPath = '/' + (req.params['*'] ?? '');
     const queryIndex = req.raw.url?.indexOf('?') ?? -1;
     const query =
       queryIndex >= 0 ? (req.raw.url?.slice(queryIndex + 1) ?? '') : '';
     const body = Buffer.isBuffer(req.body) ? req.body : null;
+    const contentType = req.headers['content-type'] ?? null;
 
-    await app.db.query(
+    const inserted = await app.db.query<{
+      id: string;
+      received_at: string;
+      cursor: string;
+    }>(
       `INSERT INTO requests
          (endpoint_id, method, path, query, headers, body, body_size, content_type, ip)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, received_at, received_at::text AS cursor`,
       [
-        endpoint.rows[0]!.id,
+        endpointId,
         req.method,
         subPath,
         query,
         JSON.stringify(req.headers),
         body,
         body?.length ?? 0,
-        req.headers['content-type'] ?? null,
+        contentType,
         req.ip,
       ],
     );
+
+    // Tell any dashboards watching this endpoint, AFTER the row is durable —
+    // the stream must never announce a request that a reload can't find.
+    const row = inserted.rows[0]!;
+    app.bus.publish(endpointId, {
+      cursor: row.cursor,
+      request: {
+        id: row.id,
+        method: req.method,
+        path: subPath,
+        query,
+        content_type: contentType,
+        body_size: body?.length ?? 0,
+        ip: req.ip,
+        received_at: row.received_at,
+      },
+    });
 
     return reply.code(200).send({ captured: true });
   }
