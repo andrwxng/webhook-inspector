@@ -12,6 +12,7 @@
   "scripts": {
     "lint": "eslint .",
     "test": "npm test --workspaces --if-present",
+    "test:e2e": "playwright test -c e2e",
     "build": "npm run build --workspaces --if-present",
     "start": "npm run start --workspace backend",
     "dev:backend": "npm run dev --workspace backend",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",
+    "@playwright/test": "^1.61.1",
     "eslint": "^9.30.0",
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.35.0"
