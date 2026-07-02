@@ -83,22 +83,45 @@ function DetailPane({
   );
 }
 
+type LiveStatus = 'connecting' | 'live' | 'reconnecting';
+
 export function RequestView({ endpoint }: { endpoint: Endpoint }) {
   const [requests, setRequests] = useState<RequestSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<LiveStatus>('connecting');
 
   const refresh = useCallback(() => {
     api<RequestSummary[]>(`/api/endpoints/${endpoint.id}/requests`).then(
-      setRequests,
+      // Merge instead of replace: an SSE event may have landed first.
+      (list) =>
+        setRequests((prev) => {
+          const known = new Set(list.map((r) => r.id));
+          return [...prev.filter((r) => !known.has(r.id)), ...list];
+        }),
       () => setRequests([]),
     );
   }, [endpoint.id]);
 
   useEffect(() => {
     setSelected(null);
+    setRequests([]);
+    setStatus('connecting');
     refresh();
-  }, [refresh]);
+
+    // Live updates. EventSource reconnects on its own and echoes our SSE
+    // event ids back as Last-Event-ID, so the server replays what we missed.
+    const source = new EventSource(`/api/endpoints/${endpoint.id}/stream`);
+    source.addEventListener('request', (e) => {
+      const incoming: RequestSummary = JSON.parse(e.data);
+      setRequests((prev) =>
+        prev.some((r) => r.id === incoming.id) ? prev : [incoming, ...prev],
+      );
+    });
+    source.onopen = () => setStatus('live');
+    source.onerror = () => setStatus('reconnecting');
+    return () => source.close();
+  }, [endpoint.id, refresh]);
 
   const url = `${window.location.origin}/in/${endpoint.slug}`;
 
@@ -115,12 +138,15 @@ export function RequestView({ endpoint }: { endpoint: Endpoint }) {
         >
           {copied ? 'Copied!' : 'Copy'}
         </button>
-        <button onClick={refresh}>Refresh</button>
+        <span className={`live-badge live-${status}`}>
+          {status === 'live' ? '● live' : `○ ${status}…`}
+        </span>
       </div>
 
       {requests.length === 0 ? (
         <p className="muted">
-          No requests yet. Send anything to the URL above, e.g.:
+          Waiting for requests — they appear here the moment they arrive.
+          Try:
           <br />
           <code>curl -X POST {url}/test -d &#39;hello&#39;</code>
         </p>

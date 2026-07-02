@@ -115,6 +115,25 @@ main {
   background: #e0e7ff;
 }
 
+/* live status */
+.live-badge {
+  font-size: 0.8em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.live-badge.live-live {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.live-badge.live-reconnecting {
+  background: #fef3c7;
+  color: #b45309;
+}
+
 /* requests */
 .endpoint-url {
   display: flex;
