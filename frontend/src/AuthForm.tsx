@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError, type User } from './api.js';
 
 export function AuthForm({ onLogin }: { onLogin: (user: User) => void }) {
@@ -7,6 +7,14 @@ export function AuthForm({ onLogin }: { onLogin: (user: User) => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [githubEnabled, setGithubEnabled] = useState(false);
+
+  useEffect(() => {
+    api<{ github: boolean }>('/api/auth/providers').then(
+      (p) => setGithubEnabled(p.github),
+      () => setGithubEnabled(false),
+    );
+  }, []);
 
   async function submit() {
     setError(null);
@@ -53,6 +61,11 @@ export function AuthForm({ onLogin }: { onLogin: (user: User) => void }) {
         </button>
       </form>
       {error && <p className="error">{error}</p>}
+      {githubEnabled && (
+        <a className="github-btn" href="/api/auth/github">
+          Continue with GitHub
+        </a>
+      )}
       <button
         className="link"
         onClick={() => setMode(mode === 'login' ? 'register' : 'login')}

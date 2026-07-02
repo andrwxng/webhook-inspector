@@ -24,6 +24,17 @@ button.link {
   padding: 0;
 }
 
+.github-btn {
+  display: block;
+  text-align: center;
+  background: #1a1a2e;
+  color: #fff;
+  padding: 8px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.9em;
+}
+
 input {
   padding: 8px;
   border: 1px solid #ccc;
