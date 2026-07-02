@@ -1,6 +1,6 @@
 # Webhook Inspector
 
-Self-hosted webhook inspection: get a unique URL, send any HTTP request to it, and inspect the full capture (method, path, query, headers, body) in a dashboard. An open-source, self-hosted take on RequestBin / webhook.site.
+Self-hosted webhook inspection: get a unique URL, send any HTTP request to it, and watch the full capture (method, path, query, headers, body) appear **live** in a dashboard — streamed over SSE the moment it lands, no polling. An open-source, self-hosted take on RequestBin / webhook.site.
 
 > Full architecture rationale lives in [docs/decisions.md](docs/decisions.md).
 
@@ -22,7 +22,7 @@ curl -X POST http://localhost:5173/in/<your-slug>/anything?x=1 \
   -H 'content-type: application/json' -d '{"hello": "world"}'
 ```
 
-Hit **Refresh** in the dashboard to see the capture (live updates land in Phase 2).
+The capture appears in the dashboard instantly — delivery is SSE-streamed (`EventSource`), with `Last-Event-ID` catch-up replaying anything missed across reconnects.
 
 ## Test
 
@@ -50,5 +50,6 @@ One service runs everything: the backend serves the built frontend, and migratio
 |---|---|---|
 | `/in/:slug[/*]` | **Ingest** — untrusted | Any method, any content-type, raw-byte capture, no auth |
 | `/api/*` | **Viewer** — authenticated | Cookie sessions, JSON, schema-validated |
+| `/api/endpoints/:id/stream` | **Viewer** — authenticated | SSE live stream with Last-Event-ID catch-up |
 | `/healthz` | Ops | Liveness probe |
 | `/*` | Static | Built frontend (production) |
