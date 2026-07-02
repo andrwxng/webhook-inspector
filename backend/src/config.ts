@@ -24,6 +24,12 @@ export interface Config {
    * replaying to localhost is the point.
    */
   replayAllowPrivate: boolean;
+  /** GitHub OAuth; both null disables it (the login button hides). */
+  githubClientId: string | null;
+  githubClientSecret: string | null;
+  /** Overridable so tests can point OAuth at a mock server. */
+  githubOauthBase: string;
+  githubApiBase: string;
 }
 
 const DEV_DATABASE_URL =
@@ -63,5 +69,9 @@ export function loadConfig(): Config {
     replayTimeoutMs: intEnv('REPLAY_TIMEOUT_MS', 10_000),
     replayMaxResponseBytes: intEnv('REPLAY_MAX_RESPONSE_BYTES', 65_536),
     replayAllowPrivate: process.env['REPLAY_ALLOW_PRIVATE'] === '1',
+    githubClientId: process.env['GITHUB_CLIENT_ID'] ?? null,
+    githubClientSecret: process.env['GITHUB_CLIENT_SECRET'] ?? null,
+    githubOauthBase: process.env['GITHUB_OAUTH_BASE'] ?? 'https://github.com',
+    githubApiBase: process.env['GITHUB_API_BASE'] ?? 'https://api.github.com',
   };
 }

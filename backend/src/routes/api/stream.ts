@@ -69,6 +69,9 @@ export const streamRoutes: FastifyPluginAsync = async (app) => {
         if (catchingUp) buffered.push(event);
         else send(event.cursor, event.request);
       });
+      // Networked buses (Redis) have a gap between subscribe() and the
+      // server ack; wait it out so the catch-up snapshot can't miss events.
+      await app.bus.ready?.(endpointId);
 
       const heartbeat = setInterval(() => {
         raw.write(': heartbeat\n\n');

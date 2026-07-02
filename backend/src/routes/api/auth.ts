@@ -54,22 +54,28 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       const email = req.body.email.toLowerCase();
       const { rows } = await app.db.query<{
         id: string;
-        password_hash: string;
+        password_hash: string | null;
       }>('SELECT id, password_hash FROM users WHERE email = $1', [email]);
 
-      // Same response for unknown email and wrong password — don't leak
-      // which emails have accounts.
+      // Same response for unknown email, wrong password, and passwordless
+      // (OAuth-only) accounts — don't leak which emails have accounts.
+      const user = rows[0];
       const ok =
-        rows.length > 0 &&
-        (await verifyPassword(req.body.password, rows[0]!.password_hash));
+        user?.password_hash != null &&
+        (await verifyPassword(req.body.password, user.password_hash));
       if (!ok) {
         return reply.code(401).send({ error: 'invalid email or password' });
       }
 
-      await createSession(req, reply, rows[0]!.id);
-      return { id: rows[0]!.id, email };
+      await createSession(req, reply, user.id);
+      return { id: user.id, email };
     },
   );
+
+  /** Which login methods exist — the UI shows/hides buttons from this. */
+  app.get('/providers', async () => {
+    return { github: Boolean(app.config.githubClientId) };
+  });
 
   app.post('/logout', async (req, reply) => {
     await destroySession(req, reply);

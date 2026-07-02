@@ -5,7 +5,11 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import { loadConfig, type Config } from './config.js';
-import { InProcessRequestBus, type RequestBus } from './events.js';
+import {
+  InProcessRequestBus,
+  RedisRequestBus,
+  type RequestBus,
+} from './events.js';
 import { RateLimiter } from './lib/rate-limit.js';
 import { Replayer } from './lib/replay.js';
 import { apiRoutes } from './routes/api/index.js';
@@ -61,9 +65,9 @@ export async function buildApp(
   const pool = new pg.Pool({ connectionString: config.databaseUrl });
   app.decorate('db', pool);
   app.decorate('config', config);
-  app.decorate('bus', new InProcessRequestBus());
 
   let redis: Redis | null = null;
+  let subscriber: Redis | null = null;
   if (config.redisUrl) {
     redis = new Redis(config.redisUrl, {
       // If Redis is down, fail checks *immediately* instead of queueing
@@ -79,9 +83,26 @@ export async function buildApp(
       'rateLimiter',
       new RateLimiter(redis, config.ingestRateLimit, config.ingestRateWindowSec),
     );
+
+    // Dedicated subscriber connection (subscribe mode blocks other
+    // commands). Offline queue stays ON here so subscriptions survive
+    // reconnects — ioredis re-subscribes automatically.
+    subscriber = new Redis(config.redisUrl, {
+      retryStrategy: (times) => Math.min(times * 500, 5_000),
+    });
+    subscriber.on('error', () => {});
+    app.decorate(
+      'bus',
+      new RedisRequestBus(redis, subscriber, (err, context) =>
+        app.log.warn({ err }, `request bus: ${context}`),
+      ),
+    );
   } else {
     app.decorate('rateLimiter', null);
-    app.log.warn('REDIS_URL not set — ingest rate limiting is DISABLED');
+    app.decorate('bus', new InProcessRequestBus());
+    app.log.warn(
+      'REDIS_URL not set — rate limiting DISABLED, live events are single-instance only',
+    );
   }
 
   app.decorate(
@@ -95,6 +116,7 @@ export async function buildApp(
 
   app.addHook('onClose', async () => {
     redis?.disconnect();
+    subscriber?.disconnect();
     await app.replayer.close();
     await pool.end();
   });

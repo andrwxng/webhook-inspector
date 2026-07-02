@@ -2,6 +2,7 @@ import cookie from '@fastify/cookie';
 import type { FastifyPluginAsync } from 'fastify';
 import { authRoutes } from './auth.js';
 import { endpointRoutes } from './endpoints.js';
+import { githubOauthRoutes } from './oauth.js';
 
 /**
  * VIEWER PATH — the authenticated dashboard API, registered under /api.
@@ -14,5 +15,6 @@ export const apiRoutes: FastifyPluginAsync = async (app) => {
   app.decorateRequest('user', null);
 
   await app.register(authRoutes, { prefix: '/auth' });
+  await app.register(githubOauthRoutes, { prefix: '/auth' });
   await app.register(endpointRoutes, { prefix: '/endpoints' });
 };

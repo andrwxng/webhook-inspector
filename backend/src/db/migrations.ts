@@ -58,4 +58,12 @@ export const migrations: ReadonlyArray<{ name: string; sql: string }> = [
       ALTER TABLE endpoints ADD COLUMN forward_url text;
     `,
   },
+  {
+    name: '003_github_oauth',
+    sql: `
+      -- GitHub OAuth users have no password; github_id identifies them.
+      ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+      ALTER TABLE users ADD COLUMN github_id bigint UNIQUE;
+    `,
+  },
 ];
