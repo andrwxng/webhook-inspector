@@ -4,10 +4,32 @@ export interface Config {
   databaseUrl: string;
   /** Cookies are Secure-only in production (HTTPS on Railway). */
   cookieSecure: boolean;
+  /** null disables Redis-backed features (ingest rate limiting), with a warning. */
+  redisUrl: string | null;
+  /** Max ingest body size; larger payloads get 413 and are not stored. */
+  ingestBodyLimitBytes: number;
+  /** Fixed-window rate limit per endpoint on the ingest path. */
+  ingestRateLimit: number;
+  ingestRateWindowSec: number;
+  /** Retention: keep at most N requests per endpoint, none older than D days. */
+  retentionMaxPerEndpoint: number;
+  retentionMaxAgeDays: number;
+  cleanupIntervalSec: number;
 }
 
 const DEV_DATABASE_URL =
   'postgres://webhook:webhook@localhost:5432/webhook_inspector';
+const DEV_REDIS_URL = 'redis://localhost:6379';
+
+function intEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer, got "${raw}"`);
+  }
+  return value;
+}
 
 export function loadConfig(): Config {
   const isProd = process.env['NODE_ENV'] === 'production';
@@ -22,5 +44,12 @@ export function loadConfig(): Config {
     host: process.env['HOST'] ?? '0.0.0.0',
     databaseUrl: databaseUrl ?? DEV_DATABASE_URL,
     cookieSecure: isProd,
+    redisUrl: process.env['REDIS_URL'] ?? (isProd ? null : DEV_REDIS_URL),
+    ingestBodyLimitBytes: intEnv('INGEST_BODY_LIMIT_BYTES', 1024 * 1024),
+    ingestRateLimit: intEnv('INGEST_RATE_LIMIT', 120),
+    ingestRateWindowSec: intEnv('INGEST_RATE_WINDOW_SEC', 60),
+    retentionMaxPerEndpoint: intEnv('RETENTION_MAX_PER_ENDPOINT', 500),
+    retentionMaxAgeDays: intEnv('RETENTION_MAX_AGE_DAYS', 7),
+    cleanupIntervalSec: intEnv('CLEANUP_INTERVAL_SEC', 600),
   };
 }

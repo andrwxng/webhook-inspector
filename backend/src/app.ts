@@ -2,9 +2,11 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { Redis } from 'ioredis';
 import pg from 'pg';
 import { loadConfig, type Config } from './config.js';
 import { InProcessRequestBus, type RequestBus } from './events.js';
+import { RateLimiter } from './lib/rate-limit.js';
 import { apiRoutes } from './routes/api/index.js';
 import { ingestRoutes } from './routes/ingest.js';
 
@@ -13,12 +15,15 @@ declare module 'fastify' {
     db: pg.Pool;
     config: Config;
     bus: RequestBus;
+    /** null when Redis is not configured — ingest then skips rate limiting. */
+    rateLimiter: RateLimiter | null;
   }
 }
 
 export interface BuildAppOptions {
   databaseUrl?: string;
   logger?: boolean;
+  configOverrides?: Partial<Config>;
 }
 
 /**
@@ -34,8 +39,11 @@ export interface BuildAppOptions {
 export async function buildApp(
   opts: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
-  const config = loadConfig();
-  if (opts.databaseUrl) config.databaseUrl = opts.databaseUrl;
+  const config: Config = {
+    ...loadConfig(),
+    ...(opts.databaseUrl ? { databaseUrl: opts.databaseUrl } : {}),
+    ...opts.configOverrides,
+  };
 
   const app = Fastify({
     logger: opts.logger ?? true,
@@ -43,13 +51,39 @@ export async function buildApp(
     // SSE connections stay open forever; without this, close() would hang
     // waiting for them (tests, and graceful shutdown on deploys).
     forceCloseConnections: true,
+    // Slowloris guard: the entire request (headers + body) must arrive
+    // within this window. Response streaming (SSE) is unaffected.
+    requestTimeout: 15_000,
   });
 
   const pool = new pg.Pool({ connectionString: config.databaseUrl });
   app.decorate('db', pool);
   app.decorate('config', config);
   app.decorate('bus', new InProcessRequestBus());
+
+  let redis: Redis | null = null;
+  if (config.redisUrl) {
+    redis = new Redis(config.redisUrl, {
+      // If Redis is down, fail checks *immediately* instead of queueing
+      // commands — the ingest handler catches the error and fails open.
+      enableOfflineQueue: false,
+      maxRetriesPerRequest: 0,
+      retryStrategy: (times) => Math.min(times * 500, 5_000),
+    });
+    // Connection errors surface as failed commands (handled at call sites);
+    // without a listener each one would also crash the process.
+    redis.on('error', () => {});
+    app.decorate(
+      'rateLimiter',
+      new RateLimiter(redis, config.ingestRateLimit, config.ingestRateWindowSec),
+    );
+  } else {
+    app.decorate('rateLimiter', null);
+    app.log.warn('REDIS_URL not set — ingest rate limiting is DISABLED');
+  }
+
   app.addHook('onClose', async () => {
+    redis?.disconnect();
     await pool.end();
   });
 

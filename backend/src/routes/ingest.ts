@@ -39,6 +39,24 @@ export const ingestRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const endpointId = endpoint.rows[0]!.id;
+
+    // Per-endpoint rate limit (Redis fixed window). Fail OPEN: if Redis is
+    // unreachable, capturing beats shedding — rate limiting protects
+    // Postgres from floods, it is not a correctness requirement.
+    if (app.rateLimiter) {
+      try {
+        const verdict = await app.rateLimiter.check(`endpoint:${endpointId}`);
+        if (!verdict.allowed) {
+          return reply
+            .code(429)
+            .header('retry-after', String(verdict.retryAfterSec))
+            .send({ error: 'rate limit exceeded' });
+        }
+      } catch (err) {
+        req.log.warn({ err }, 'rate limiter unavailable — failing open');
+      }
+    }
+
     const subPath = '/' + (req.params['*'] ?? '');
     const queryIndex = req.raw.url?.indexOf('?') ?? -1;
     const query =
@@ -88,6 +106,9 @@ export const ingestRoutes: FastifyPluginAsync = async (app) => {
     return reply.code(200).send({ captured: true });
   }
 
-  app.all('/:slug', capture);
-  app.all('/:slug/*', capture);
+  // Oversized bodies get Fastify's 413 before the handler runs — rejected,
+  // never buffered past the limit, never stored.
+  const routeOpts = { bodyLimit: app.config.ingestBodyLimitBytes };
+  app.all('/:slug', routeOpts, capture);
+  app.all('/:slug/*', routeOpts, capture);
 };

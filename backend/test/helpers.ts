@@ -1,9 +1,20 @@
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
+import type { Config } from '../src/config.js';
 import { TEST_DATABASE_URL } from './setup/test-db.js';
 
-export async function buildTestApp(): Promise<FastifyInstance> {
-  return buildApp({ databaseUrl: TEST_DATABASE_URL, logger: false });
+// Redis db 15 keeps test keys away from local dev (db 0).
+const TEST_REDIS_URL =
+  process.env['TEST_REDIS_URL'] ?? 'redis://localhost:6379/15';
+
+export async function buildTestApp(
+  configOverrides: Partial<Config> = {},
+): Promise<FastifyInstance> {
+  return buildApp({
+    databaseUrl: TEST_DATABASE_URL,
+    logger: false,
+    configOverrides: { redisUrl: TEST_REDIS_URL, ...configOverrides },
+  });
 }
 
 export async function resetDb(app: FastifyInstance): Promise<void> {
