@@ -82,7 +82,11 @@ export function ReplayPanel({
           value={targetUrl}
           onChange={(e) => setTargetUrl(e.target.value)}
         />
-        <button onClick={() => void send()} disabled={busy || !targetUrl}>
+        <button
+          className="primary"
+          onClick={() => void send()}
+          disabled={busy || !targetUrl}
+        >
           {busy ? 'Sending…' : editing ? 'Send edited' : 'Replay'}
         </button>
         <label className="inline-check">

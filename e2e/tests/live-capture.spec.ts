@@ -41,9 +41,10 @@ test('register → create endpoint → webhook appears live → inspect detail',
   await expect(row).toHaveCount(1);
   await expect(row).toContainText('/e2e/orders');
 
-  // Full detail: path, custom header, payload (rendered as text).
+  // Full detail: path, custom header, payload (JSON is pretty-printed,
+  // still rendered as text only).
   await row.click();
   await expect(page.locator('.detail')).toContainText('/e2e/orders');
   await expect(page.locator('.detail')).toContainText('x-e2e-header');
-  await expect(page.locator('.payload')).toContainText('{"event":"e2e"}');
+  await expect(page.locator('.payload')).toContainText('"event": "e2e"');
 });

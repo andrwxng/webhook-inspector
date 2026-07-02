@@ -8,8 +8,25 @@ import {
 } from './api.js';
 import { ReplayPanel } from './ReplayPanel.js';
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString();
+/** Re-renders on an interval so relative timestamps stay fresh. */
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+  return now;
+}
+
+function timeAgo(iso: string, now: number): string {
+  const seconds = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 1000));
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 function formatSize(bytes: number): string {
@@ -20,7 +37,8 @@ function formatSize(bytes: number): string {
 /**
  * Captured payloads are hostile input. They are only ever rendered as React
  * text nodes (auto-escaped) — never dangerouslySetInnerHTML, never
- * interpreted as HTML/JSON/anything.
+ * interpreted as HTML. Pretty-printing JSON is parse + re-stringify of the
+ * text, still rendered as text.
  */
 function BodyView({ detail }: { detail: RequestDetail }) {
   if (!detail.body) return <p className="muted">No body</p>;
@@ -34,7 +52,18 @@ function BodyView({ detail }: { detail: RequestDetail }) {
       </p>
     );
   }
-  return <pre className="payload">{detail.body}</pre>;
+  let display = detail.body;
+  if (
+    (detail.contentType ?? '').includes('json') ||
+    /^\s*[[{]/.test(detail.body)
+  ) {
+    try {
+      display = JSON.stringify(JSON.parse(detail.body), null, 2);
+    } catch {
+      // not actually JSON — show as-is
+    }
+  }
+  return <pre className="payload">{display}</pre>;
 }
 
 function DetailPane({
@@ -53,21 +82,42 @@ function DetailPane({
     ).then(setDetail, () => setDetail(null));
   }, [endpointId, requestId]);
 
-  if (!detail) return <p className="muted">Loading…</p>;
+  if (!detail) return <div className="select-hint">Loading…</div>;
+
+  const queryParams = detail.query
+    ? [...new URLSearchParams(detail.query).entries()]
+    : [];
 
   return (
     <div className="detail">
       <h3>
         <span className={`method method-${detail.method}`}>
           {detail.method}
-        </span>{' '}
-        {detail.path}
-        {detail.query && <span className="muted">?{detail.query}</span>}
+        </span>
+        <span className="wrap">{detail.path}</span>
       </h3>
       <p className="muted">
         {new Date(detail.receivedAt).toLocaleString()} · from {detail.ip} ·{' '}
         {formatSize(detail.bodySize)}
+        {detail.contentType && <> · {detail.contentType}</>}
       </p>
+
+      {queryParams.length > 0 && (
+        <>
+          <h4>Query parameters</h4>
+          <table>
+            <tbody>
+              {queryParams.map(([key, value], i) => (
+                <tr key={i}>
+                  <td className="header-name">{key}</td>
+                  <td className="wrap">{value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
       <h4>Headers</h4>
       <table>
         <tbody>
@@ -79,8 +129,10 @@ function DetailPane({
           ))}
         </tbody>
       </table>
+
       <h4>Body</h4>
       <BodyView detail={detail} />
+
       <ReplayPanel key={detail.id} endpointId={endpointId} detail={detail} />
     </div>
   );
@@ -125,11 +177,19 @@ function ForwardBar({ endpoint }: { endpoint: Endpoint }) {
 
 type LiveStatus = 'connecting' | 'live' | 'reconnecting';
 
-export function RequestView({ endpoint }: { endpoint: Endpoint }) {
+export function RequestView({
+  endpoint,
+  onRequest,
+}: {
+  endpoint: Endpoint;
+  /** Called once per newly arrived request, so the parent can keep counts fresh. */
+  onRequest?: (endpointId: string) => void;
+}) {
   const [requests, setRequests] = useState<RequestSummary[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<LiveStatus>('connecting');
+  const now = useNow(15_000);
 
   const refresh = useCallback(() => {
     api<RequestSummary[]>(`/api/endpoints/${endpoint.id}/requests`).then(
@@ -152,21 +212,40 @@ export function RequestView({ endpoint }: { endpoint: Endpoint }) {
     // Live updates. EventSource reconnects on its own and echoes our SSE
     // event ids back as Last-Event-ID, so the server replays what we missed.
     const source = new EventSource(`/api/endpoints/${endpoint.id}/stream`);
+    // Dedupes SSE deliveries (e.g. replays after a reconnect) so the
+    // parent's count callback fires at most once per request.
+    const seen = new Set<string>();
     source.addEventListener('request', (e) => {
       const incoming: RequestSummary = JSON.parse(e.data);
+      if (seen.has(incoming.id)) return;
+      seen.add(incoming.id);
       setRequests((prev) =>
         prev.some((r) => r.id === incoming.id) ? prev : [incoming, ...prev],
       );
+      onRequest?.(endpoint.id);
     });
-    source.onopen = () => setStatus('live');
+    source.onopen = () => {
+      setStatus('live');
+      // Re-sync: anything that arrived while the stream was still
+      // connecting isn't in the initial fetch and won't be replayed
+      // (Last-Event-ID only covers reconnects, not the first connect).
+      refresh();
+    };
     source.onerror = () => setStatus('reconnecting');
     return () => source.close();
-  }, [endpoint.id, refresh]);
+  }, [endpoint.id, refresh, onRequest]);
 
   const url = `${window.location.origin}/in/${endpoint.slug}`;
 
   return (
     <section className="requests">
+      <div className="endpoint-header">
+        <h2>{endpoint.name ?? endpoint.slug}</h2>
+        <span className="muted">
+          {requests.length} request{requests.length === 1 ? '' : 's'}
+        </span>
+      </div>
+
       <div className="endpoint-url">
         <code>{url}</code>
         <button
@@ -179,19 +258,24 @@ export function RequestView({ endpoint }: { endpoint: Endpoint }) {
           {copied ? 'Copied!' : 'Copy'}
         </button>
         <span className={`live-badge live-${status}`}>
-          {status === 'live' ? '● live' : `○ ${status}…`}
+          <span className="dot" />
+          {status === 'live' ? 'live' : `${status}…`}
         </span>
       </div>
 
       <ForwardBar key={endpoint.id} endpoint={endpoint} />
 
       {requests.length === 0 ? (
-        <p className="muted">
-          Waiting for requests — they appear here the moment they arrive.
-          Try:
-          <br />
-          <code>curl -X POST {url}/test -d &#39;hello&#39;</code>
-        </p>
+        <div className="waiting-card">
+          <p>
+            Waiting for requests — they appear here the moment they arrive.
+          </p>
+          <code className="curl">
+            curl -X POST {url}/test \{'\n'}
+            {'  '}-H &#39;content-type: application/json&#39; \{'\n'}
+            {'  '}-d &#39;{'{"hello": "world"}'}&#39;
+          </code>
+        </div>
       ) : (
         <div className="split">
           <ul className="request-list">
@@ -203,14 +287,14 @@ export function RequestView({ endpoint }: { endpoint: Endpoint }) {
               >
                 <span className={`method method-${r.method}`}>{r.method}</span>
                 <span className="path">{r.path}</span>
-                <span className="muted">{formatTime(r.received_at)}</span>
+                <span className="time">{timeAgo(r.received_at, now)}</span>
               </li>
             ))}
           </ul>
           {selected ? (
             <DetailPane endpointId={endpoint.id} requestId={selected} />
           ) : (
-            <p className="muted">Select a request to inspect it.</p>
+            <div className="select-hint">Select a request to inspect it</div>
           )}
         </div>
       )}
