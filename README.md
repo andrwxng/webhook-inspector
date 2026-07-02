@@ -48,7 +48,7 @@ One service runs everything: the backend serves the built frontend, and migratio
 
 | Path | Traffic type | Notes |
 |---|---|---|
-| `/in/:slug[/*]` | **Ingest** — untrusted | Any method, any content-type, raw-byte capture, no auth |
+| `/in/:slug[/*]` | **Ingest** — untrusted | Any method, any content-type, raw-byte capture, no auth. 1 MiB body cap (413), per-endpoint rate limit (429, Redis-backed, fails open), 15s request timeout. Retention: newest 500 per endpoint, 7-day TTL |
 | `/api/*` | **Viewer** — authenticated | Cookie sessions, JSON, schema-validated |
 | `/api/endpoints/:id/stream` | **Viewer** — authenticated | SSE live stream with Last-Event-ID catch-up |
 | `/healthz` | Ops | Liveness probe |
