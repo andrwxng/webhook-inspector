@@ -30,10 +30,10 @@ export const ingestRoutes: FastifyPluginAsync = async (app) => {
   ) {
     const { slug } = req.params;
 
-    const endpoint = await app.db.query<{ id: string }>(
-      'SELECT id FROM endpoints WHERE slug = $1',
-      [slug],
-    );
+    const endpoint = await app.db.query<{
+      id: string;
+      forward_url: string | null;
+    }>('SELECT id, forward_url FROM endpoints WHERE slug = $1', [slug]);
     if (endpoint.rowCount === 0) {
       return reply.code(404).send({ error: 'unknown endpoint' });
     }
@@ -102,6 +102,22 @@ export const ingestRoutes: FastifyPluginAsync = async (app) => {
         received_at: row.received_at,
       },
     });
+
+    // Auto-forward, AFTER capture and publish, deliberately not awaited:
+    // the sender's response time and success must never depend on the
+    // forward target being up. Failures are logged; capture already won.
+    const forwardBase = endpoint.rows[0]!.forward_url;
+    if (forwardBase) {
+      const target =
+        forwardBase.replace(/\/+$/, '') +
+        (subPath === '/' ? '' : subPath) +
+        (query ? `?${query}` : '');
+      void app.replayer
+        .send({ url: target, method: req.method, headers: req.headers, body })
+        .catch((err: unknown) => {
+          req.log.warn({ err, target }, 'auto-forward failed');
+        });
+    }
 
     return reply.code(200).send({ captured: true });
   }

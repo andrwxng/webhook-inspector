@@ -15,6 +15,15 @@ export interface Config {
   retentionMaxPerEndpoint: number;
   retentionMaxAgeDays: number;
   cleanupIntervalSec: number;
+  /** Replay/forward: total timeout and response-preview cap. */
+  replayTimeoutMs: number;
+  replayMaxResponseBytes: number;
+  /**
+   * Allow replay/forward targets on private/internal addresses. OFF by
+   * default (SSRF guard); set REPLAY_ALLOW_PRIVATE=1 for local dev where
+   * replaying to localhost is the point.
+   */
+  replayAllowPrivate: boolean;
 }
 
 const DEV_DATABASE_URL =
@@ -51,5 +60,8 @@ export function loadConfig(): Config {
     retentionMaxPerEndpoint: intEnv('RETENTION_MAX_PER_ENDPOINT', 500),
     retentionMaxAgeDays: intEnv('RETENTION_MAX_AGE_DAYS', 7),
     cleanupIntervalSec: intEnv('CLEANUP_INTERVAL_SEC', 600),
+    replayTimeoutMs: intEnv('REPLAY_TIMEOUT_MS', 10_000),
+    replayMaxResponseBytes: intEnv('REPLAY_MAX_RESPONSE_BYTES', 65_536),
+    replayAllowPrivate: process.env['REPLAY_ALLOW_PRIVATE'] === '1',
   };
 }

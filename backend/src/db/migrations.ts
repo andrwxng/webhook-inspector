@@ -50,4 +50,12 @@ export const migrations: ReadonlyArray<{ name: string; sql: string }> = [
         ON requests (endpoint_id, received_at DESC);
     `,
   },
+  {
+    name: '002_endpoint_forward_url',
+    sql: `
+      -- Optional auto-forward target: incoming requests are re-sent here
+      -- asynchronously after capture (Phase 4).
+      ALTER TABLE endpoints ADD COLUMN forward_url text;
+    `,
+  },
 ];

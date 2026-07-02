@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { generateSlug } from '../../lib/ids.js';
+import { assertSafeTargetUrl, SsrfBlockedError } from '../../lib/ssrf.js';
 import { requireAuth } from '../../plugins/auth.js';
+import { replayRoutes } from './replay.js';
 import { streamRoutes } from './stream.js';
 
 const UUID_PATTERN =
@@ -10,8 +12,9 @@ export const endpointRoutes: FastifyPluginAsync = async (app) => {
   // Everything under /api/endpoints requires a logged-in user.
   app.addHook('preHandler', requireAuth);
 
-  // SSE live stream (inherits the auth hook).
+  // SSE live stream + replay (both inherit the auth hook).
   await app.register(streamRoutes);
+  await app.register(replayRoutes);
 
   app.post<{ Body: { name?: string } | null }>(
     '/',
@@ -51,7 +54,7 @@ export const endpointRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/', async (req) => {
     const { rows } = await app.db.query(
-      `SELECT e.id, e.slug, e.name, e.created_at,
+      `SELECT e.id, e.slug, e.name, e.forward_url, e.created_at,
               count(r.id)::int AS request_count,
               max(r.received_at) AS last_request_at
          FROM endpoints e
@@ -71,6 +74,51 @@ export const endpointRoutes: FastifyPluginAsync = async (app) => {
       properties: { endpointId: { type: 'string', pattern: UUID_PATTERN } },
     },
   } as const;
+
+  // Configure auto-forwarding. Static SSRF checks run at save time for
+  // early feedback; the connect-time guard still applies at send time.
+  app.patch<{
+    Params: { endpointId: string };
+    Body: { forward_url: string | null };
+  }>(
+    '/:endpointId',
+    {
+      schema: {
+        ...endpointParamsSchema,
+        body: {
+          type: 'object',
+          required: ['forward_url'],
+          additionalProperties: false,
+          properties: {
+            forward_url: { type: ['string', 'null'], maxLength: 2000 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const target = req.body.forward_url;
+      if (target !== null) {
+        try {
+          assertSafeTargetUrl(target, app.config.replayAllowPrivate);
+        } catch (err) {
+          if (err instanceof SsrfBlockedError) {
+            return reply.code(400).send({ error: `invalid target: ${err.message}` });
+          }
+          throw err;
+        }
+      }
+      const { rows } = await app.db.query(
+        `UPDATE endpoints SET forward_url = $1
+          WHERE id = $2 AND user_id = $3
+          RETURNING id, slug, name, forward_url, created_at`,
+        [target, req.params.endpointId, req.user!.id],
+      );
+      if (rows.length === 0) {
+        return reply.code(404).send({ error: 'endpoint not found' });
+      }
+      return rows[0];
+    },
+  );
 
   // Request history for one endpoint. Summary only — no bodies — so the
   // list stays cheap even when payloads are large.

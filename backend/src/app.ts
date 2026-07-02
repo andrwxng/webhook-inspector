@@ -7,6 +7,7 @@ import pg from 'pg';
 import { loadConfig, type Config } from './config.js';
 import { InProcessRequestBus, type RequestBus } from './events.js';
 import { RateLimiter } from './lib/rate-limit.js';
+import { Replayer } from './lib/replay.js';
 import { apiRoutes } from './routes/api/index.js';
 import { ingestRoutes } from './routes/ingest.js';
 
@@ -17,6 +18,7 @@ declare module 'fastify' {
     bus: RequestBus;
     /** null when Redis is not configured — ingest then skips rate limiting. */
     rateLimiter: RateLimiter | null;
+    replayer: Replayer;
   }
 }
 
@@ -82,8 +84,18 @@ export async function buildApp(
     app.log.warn('REDIS_URL not set — ingest rate limiting is DISABLED');
   }
 
+  app.decorate(
+    'replayer',
+    new Replayer({
+      timeoutMs: config.replayTimeoutMs,
+      maxResponseBytes: config.replayMaxResponseBytes,
+      allowPrivate: config.replayAllowPrivate,
+    }),
+  );
+
   app.addHook('onClose', async () => {
     redis?.disconnect();
+    await app.replayer.close();
     await pool.end();
   });
 
