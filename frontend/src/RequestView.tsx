@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   api,
+  ApiError,
   type Endpoint,
   type RequestDetail,
   type RequestSummary,
 } from './api.js';
+import { ReplayPanel } from './ReplayPanel.js';
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString();
@@ -79,6 +81,44 @@ function DetailPane({
       </table>
       <h4>Body</h4>
       <BodyView detail={detail} />
+      <ReplayPanel key={detail.id} endpointId={endpointId} detail={detail} />
+    </div>
+  );
+}
+
+/** Configure auto-forwarding of incoming requests to a target URL. */
+function ForwardBar({ endpoint }: { endpoint: Endpoint }) {
+  const [value, setValue] = useState(endpoint.forward_url ?? '');
+  const [state, setState] = useState<'idle' | 'saved' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+
+  async function save(url: string | null) {
+    try {
+      await api(`/api/endpoints/${endpoint.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ forward_url: url }),
+      });
+      setValue(url ?? '');
+      setState('saved');
+      setTimeout(() => setState('idle'), 1500);
+    } catch (err) {
+      setState('error');
+      setMessage(err instanceof ApiError ? err.message : 'save failed');
+    }
+  }
+
+  return (
+    <div className="forward-bar">
+      <span className="muted">Auto-forward to</span>
+      <input
+        placeholder="https://target.example.com/hook (optional)"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        maxLength={2000}
+      />
+      <button onClick={() => void save(value || null)}>Save</button>
+      {state === 'saved' && <span className="status-ok">✓ saved</span>}
+      {state === 'error' && <span className="error">{message}</span>}
     </div>
   );
 }
@@ -142,6 +182,8 @@ export function RequestView({ endpoint }: { endpoint: Endpoint }) {
           {status === 'live' ? '● live' : `○ ${status}…`}
         </span>
       </div>
+
+      <ForwardBar key={endpoint.id} endpoint={endpoint} />
 
       {requests.length === 0 ? (
         <p className="muted">

@@ -7,9 +7,18 @@ export interface Endpoint {
   id: string;
   slug: string;
   name: string | null;
+  forward_url: string | null;
   created_at: string;
   request_count: number;
   last_request_at: string | null;
+}
+
+export interface ReplayResult {
+  status: number;
+  durationMs: number;
+  headers: Record<string, string | string[]>;
+  body: { encoding: 'utf8' | 'base64'; data: string } | null;
+  truncated: boolean;
 }
 
 export interface RequestSummary {

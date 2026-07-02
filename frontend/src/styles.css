@@ -220,6 +220,90 @@ main {
   white-space: nowrap;
 }
 
+/* replay & forward */
+.forward-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.forward-bar input {
+  flex: 1;
+  min-width: 220px;
+  font-size: 0.85em;
+}
+
+.replay-panel {
+  margin-top: 16px;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+.replay-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.replay-url {
+  flex: 1;
+  min-width: 220px;
+  font-size: 0.85em;
+}
+
+.replay-method {
+  width: 100px;
+  font-family: ui-monospace, monospace;
+}
+
+.replay-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.replay-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85em;
+  color: #6b7280;
+}
+
+.replay-editor textarea {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85em;
+  color: #6b7280;
+}
+
+.replay-result {
+  margin-top: 8px;
+}
+
+.status-ok {
+  color: #15803d;
+  font-weight: 700;
+}
+
+.status-bad {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
 .payload {
   background: #f8f8f8;
   border: 1px solid #eee;
