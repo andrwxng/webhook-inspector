@@ -14,7 +14,7 @@ test('register → create endpoint → webhook appears live → inspect detail',
 
   // Register a fresh account.
   await page.goto('/');
-  await page.click('text=No account? Register');
+  await page.getByRole('tab', { name: 'Sign up' }).click();
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', 'password123');
   await page.click('button[type="submit"]');

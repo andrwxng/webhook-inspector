@@ -49,8 +49,36 @@ export function AuthForm({ onLogin }: { onLogin: (user: User) => void }) {
           Webhook Inspector
         </div>
         <p className="auth-sub">
-          Unique URLs that capture every request — live.
+          {mode === 'login'
+            ? 'Welcome back — log in to your endpoints.'
+            : 'Create an account to get your first capture URL.'}
         </p>
+        <div className="auth-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'login'}
+            className={mode === 'login' ? 'active' : ''}
+            onClick={() => {
+              setMode('login');
+              setError(null);
+            }}
+          >
+            Log in
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'register'}
+            className={mode === 'register' ? 'active' : ''}
+            onClick={() => {
+              setMode('register');
+              setError(null);
+            }}
+          >
+            Sign up
+          </button>
+        </div>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -66,7 +94,9 @@ export function AuthForm({ onLogin }: { onLogin: (user: User) => void }) {
           />
           <input
             type="password"
-            placeholder="password (min 8 chars)"
+            placeholder={
+              mode === 'login' ? 'password' : 'choose a password (min 8 chars)'
+            }
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             minLength={8}
@@ -86,14 +116,6 @@ export function AuthForm({ onLogin }: { onLogin: (user: User) => void }) {
             </a>
           </>
         )}
-        <button
-          className="link"
-          onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
-        >
-          {mode === 'login'
-            ? 'No account? Register'
-            : 'Have an account? Log in'}
-        </button>
       </div>
     </div>
   );

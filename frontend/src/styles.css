@@ -238,6 +238,37 @@ code {
   margin: 0 0 8px;
 }
 
+/* Segmented log in / sign up switch — the active mode must be obvious. */
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  margin-bottom: 4px;
+}
+
+.auth-tabs button {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 0;
+  font-weight: 600;
+  color: var(--text-faint);
+  transition: background 0.15s, color 0.15s;
+}
+
+.auth-tabs button:hover {
+  color: var(--text-dim);
+}
+
+.auth-tabs button.active {
+  background: var(--accent);
+  color: #0a0d14;
+}
+
 .auth-card form {
   display: flex;
   flex-direction: column;
