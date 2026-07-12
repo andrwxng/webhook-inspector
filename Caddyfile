@@ -1,0 +1,8 @@
+# Caddy terminates TLS (certificates from Let's Encrypt, renewed
+# automatically) and proxies everything to the app container.
+{$DOMAIN} {
+	reverse_proxy app:3000 {
+		# SSE: stream events through immediately, never buffer.
+		flush_interval -1
+	}
+}
