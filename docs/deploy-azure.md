@@ -12,7 +12,10 @@ in and rebuilding.
    credit card. You get $100 credit plus 12 months of free services,
    including 750 h/month of a B1s VM (= one VM, always on, free).
 2. Portal → **Virtual machines → Create**:
-   - Image: **Ubuntu Server 24.04 LTS**, Size: **B1s** (1 vCPU / 1 GiB)
+   - Image: **Ubuntu Server 24.04 LTS**
+   - Size: **B2ats_v2** (2 vCPU / 1 GiB, AMD) — current free-tier size,
+     750 h/month for 12 months; the listed price only applies past that.
+     (B1s and the ARM B2pts_v2 are equally free if your region offers them.)
    - Authentication: **SSH public key** — paste yours
      (`cat ~/.ssh/id_ed25519.pub`)
    - Inbound ports: allow **22, 80, 443**
